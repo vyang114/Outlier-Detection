@@ -1,0 +1,308 @@
+---
+title: "STAT 341/641 HW1"
+author: "Vera Yang  301272027"
+date: "Feb 10, 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+**Teaching Assistant:**  Yanjun Liu
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Question 2 ###
+```{r}
+# Write a function to compute the covariance matrix
+# https://stats.seandolinar.com/making-a-covariance-matrix-in-r/
+
+compute_cov <- function(input){
+ 
+  n_col <- ncol(input)
+  n_row <- nrow(input)
+  get_column_mean <- NULL
+  
+  # calculate the mean for each column and store them into a dataframe
+  for(i in 1:n_col){
+    get_column_mean[i] <- mean(input[, i])
+  }
+  
+  # flip column and row
+  get_column_mean <- t(get_column_mean)
+  
+  mean_matrix <- matrix(data = 1, nrow = n_row) %*% get_column_mean
+  
+  difference <- input - mean_matrix
+  
+  cov_matrix <- ((n_row-1)^(-1))*t(difference) %*% as.matrix(difference)
+  
+  return(cov_matrix)
+}
+```
+
+
+```{r, message = FALSE}
+library(ggplot2)
+library(tidyverse)
+library(corrplot)
+
+diabetes <- read.csv(file = "diabetes.csv", header = TRUE)
+diabetes <- diabetes %>%
+  select(Pregnancies, Glucose, BloodPressure, BMI, Insulin, Age) 
+
+#cov(diabetes)
+compute_cov(diabetes)
+
+cor_diabetes <- cor(diabetes)
+corrplot(cor_diabetes, method = "color")
+```
+
+```{r, include=FALSE}
+dat = read.table("college.txt", header=TRUE, sep="\t")
+college = subset(dat, complete.cases(dat))
+college <- college %>%
+  select(Enrollment, Retention, Grad.rate, Top.10, Accept.rate)
+
+#cov(college)
+compute_cov(college)
+
+cor_college <- cor(college)
+corrplot(cor_college, method = "color")
+```
+
+The covariance that I computed for the diabetes data has similar information to the correlation plot. In the correlation plot, a dark blue square between two variables, such as Glucose and Insulin, indicates a positive relationship. This matches with the covariance that I computed since the covariance for those two variables is a large positive number as they increase or decrease together. Furthermore, an orange square in the correlation plot indicates a negative correlation between two variables, such as Insulin and Pregnancies, and this matches with the negative convariance that I computed for those two variables.
+
+
+```{r, include = FALSE}
+# Code given in lab
+
+K <- ncol(diabetes)
+n <- nrow(diabetes)
+Xc <- scale(diabetes, center = TRUE, scale = FALSE)
+
+# t function is for the transpose
+cov_hard <- t(Xc) %*% Xc / (n-1)
+
+cov_calculation <- function(data) {
+  
+  n <- nrow(data)
+  Xc <- scale(data, center = TRUE, scale = FALSE)
+  cov_hard <- t(Xc) %*% Xc / (n-1)
+  
+  return (cov_hard)
+}
+
+cov_calculation(data = diabetes)
+```
+
+
+### Question 3 ###
+
+```{r}
+# The code was shown in lab
+library(tidyverse)
+
+set.seed(123)
+
+K <- ncol(diabetes)
+sample_size <- 30
+
+# alternative way to selecct
+#diabetes_jack <- diabetes %>%
+#  slice(1:sample_n)
+
+# randomly select 30 samples from the diabetes dataset
+diabetes_jack <- sample_n(diabetes, sample_size, replace = FALSE)
+
+#new_diabetes_jack <- new_diabetes %>%
+#  sample_n(size = sample_n, replace = FALSE)
+
+cov_temp <- matrix(0, K, K)
+
+# "-i" means minus the i row, when i = 2, remove second row
+# cov_temp is the sum of all jackknife matrix
+for(i in 1:sample_size){
+  cov_temp <- cov_temp + cov(diabetes_jack[-i, ])
+}
+
+# compute the emperical average of the JackKnife replicate
+emp_ave <- cov_temp/sample_size
+emp_ave
+
+# calculate the difference bewteen JackKnife estimate and the covariance matrix, 
+# JackKnife is pretty close to the true covariance matrix
+diff <- emp_ave - cov(diabetes_jack)
+diff
+```
+
+After calculating the difference between empirical average of the JackKnife replicates and the covariance matrix, all the entries in the covariance matrix do not differ signifacntly from the JackKnife estimate. This means that the JackKnife replicate is a robust estimtate.
+
+### Question 5 ###
+
+```{r}
+# Code from Lecture 3
+
+set.seed(12345)
+N <- 100
+R <- 250
+
+myres <- matrix(0, R, 3)
+colnames(myres) <- c("Mean", "Median", "Trimmed mean")
+
+# looping to do the sampling 250 times
+for (ii in 1:R){
+  mysamp <- rcauchy(N, 0, 1)
+  myres[ii,] <- c(mean(mysamp), median(mysamp), mean(mysamp, trim = 0.1))
+}
+
+par(mfrow = c(1, 3))
+hist(myres[,1], main = "Histogram of Mean", xlab = "Mean")
+hist(myres[,2], main = "Histogram of Median", xlab = "Median")
+hist(myres[,3], main = "Histogram of Trimmed Mean", xlab = "Trimmed mean")
+
+var(myres[,1])
+var(myres[,2])
+var(myres[,3])
+
+```
+
+
+```{r, include=FALSE}
+# The code was shown in lab
+
+library(tidyverse)
+set.seed(123)
+alpha = 0.1
+cauchy_n <- 100
+R <- 250
+
+cauchy_mean <- numeric(R)
+cauchy_median <- numeric(R)
+cauchy_trimmed <- numeric(R)
+
+for(i in 1:R){
+  cauchy_sample <- rcauchy(n = cauchy_n, location = 0, scale = 1)
+  cauchy_mean[i] <- mean(cauchy_sample)
+  cauchy_median[i] <- median(cauchy_sample)
+  cauchy_trimmed[i] <- mean(cauchy_sample, trim = alpha)
+}
+
+par(mfrow = c(1, 3))
+hist(cauchy_mean)
+hist(cauchy_median)
+hist(cauchy_trimmed)
+
+var(cauchy_mean)
+var(cauchy_median)
+var(cauchy_trimmed)
+
+```
+
+**The median has the smallest variance.**
+
+### Question 6 ###
+
+```{r}
+library(tidyverse)
+
+set.seed(12345)
+alpha = 0.1
+N_t <- 100
+R_t <- 250
+
+t_mean <- numeric(R_t)
+t_median <- numeric(R_t)
+t_trimmed <- numeric(R_t)
+
+# looping to do the sampling 250 times
+# T distribution with 2 df
+for (i_t in 1:R_t){
+  T_sample <- rt(n = N_t, df = 2)
+  t_mean[i_t] <- mean(T_sample)
+  t_median[i_t] <- median(T_sample)
+  t_trimmed[i_t] <- mean(T_sample, trim = alpha)
+}
+
+par(mfrow = c(1, 3))
+hist(t_mean)
+hist(t_median)
+hist(t_trimmed)
+
+var(t_mean)
+var(t_median)
+var(t_trimmed)
+```
+
+At 2df, the median has the smallest variance, just slightly less than the trimmed mean. After testing the T distribution with different degrees of freedom, I found out that as the number of degrees of freedom increase, the variance of arithmetic mean, median, and trimmed mean decrease. The variance of arithmetic mean also becomes nearly equal to the trimmed mean, this means they have similar efficiency, whereas the median is less efficient compared to them.
+
+When the degree of freedom approaches 100 and over 100, the variance of arithmetic mean becomes smaller than both of median and trimmed mean. This means that the arithmetic mean is more efficient than these two, especially median.
+
+### Question 7 ###
+
+```{r, message = FALSE}
+# Take the first column of the table as the row names
+outlier_set <- read.csv(file = "outlier_set.csv", row.names = 1)
+
+# Local Outlier Factor  
+library(DescTools)
+lof <- LOF(outlier_set, 5)
+
+hist(LOF(outlier_set, 5),
+  col = "coral",
+  main = "Histogram of LOF(outlier_set, 5)"
+)
+
+# Isolation Forest 
+library(solitude)
+isf = isolationForest$new(sample_size = round(nrow(outlier_set) * 0.8, 0)) # initiate
+isf$fit(outlier_set) # fit on 80% data
+head(isf$scores)  # gives the anomaly score (0 means similar, and 1 means dissimilar)
+
+# combined dataset, plot anomaly score 
+scores <- isf$scores
+outlier_set_score <- cbind(outlier_set, anomaly_score = scores[, anomaly_score], iof_score = lof)
+
+library(gridExtra)
+# set the color of the points according to the size of the anomaly score
+anomaly_plot <- ggplot(data = outlier_set_score, mapping = aes(x = X, y = Y)) +
+  geom_point(mapping = aes(color = anomaly_score)) +
+  scale_color_gradient(low = "black", high = "blue") +
+  ggtitle("ISF Plot")
+
+iof_plot <- ggplot(data = outlier_set_score, mapping = aes(x = X, y = Y)) +
+  geom_point(mapping = aes(color = iof_score)) +
+  scale_color_gradient(low = "black", high = "blue") +
+  ggtitle("IOF Plot")
+
+grid.arrange(anomaly_plot, iof_plot, ncol=2)
+
+# outlier vs. normal
+# outlier_set_score$outlier <- as.factor(ifelse(scores$anomaly_score >= 0.5, "outlier"))
+
+
+```
+
+Looking the above plot, I see that an outlier given by the isolation forest may not be an outlier in the local outlier factor test, yet there are still three data points that are outliers given by both methods. These three points are the green points in the plot below.
+
+```{r}
+ggplot(data = outlier_set_score, mapping = aes(x = X, y = Y)) +
+  geom_point(aes(color = (anomaly_score > 0.5 & iof_score > 3))) +
+  ggtitle("Outliers Given by Both ISF and IOF")
+```
+
+### Question 9 ###
+
+A breakdown point is a measure of robustness and it is a point after which an estimator becomes arbitrary, giving incorrect results. We want a high breakdown point because if an estimator has a high breakdown point, the estimator is more robust.
+
+
+### Question 10 ###
+$$IF(Y, F, T) = \lim_{\lambda \rightarrow 0} \frac{T((1-\lambda)F + \lambda\cdot\delta_{y}) - T(F)}{\lambda}$$
+
+Unlike median and arithmetic mean, the influence function is not calculated solely from the whole data. It is a measure of how much an estimator **changes** when an outlier is added and the amount of increase or decrease will indicate how much the estimator depends on that data point in the sample. 
+
+Another difference is that because the influence function uses derivative, it can go to infinity as point Y becomes too large. Therefore, the influence function has to be bounded to prevent from getting infinity as a result.
+
+
