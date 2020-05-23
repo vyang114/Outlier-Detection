@@ -10,7 +10,6 @@ output:
 
 **STAT 341/641:**        Intro to EDA and Statistical Computing  
 **Lab #7:**              Merging Data, Clustering, and Robust Regression   
-**Teaching Assistant:**  Yanjun Liu
 
 * * *
 
