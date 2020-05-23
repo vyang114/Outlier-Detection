@@ -7,7 +7,6 @@ output:
   html_document: default
 ---
 
-**Teaching Assistant:**  Yanjun Liu
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
