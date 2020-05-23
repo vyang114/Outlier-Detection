@@ -1,0 +1,353 @@
+---
+title: 'STAT 341/641 Lab: Week Seven'
+author: "Vera Yang"
+date: "March 18, 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+---
+
+**STAT 341/641:**        Intro to EDA and Statistical Computing  
+**Lab #7:**              Merging Data, Clustering, and Robust Regression   
+**Teaching Assistant:**  Yanjun Liu
+
+* * *
+
+**Directions:**  Complete the following questions.
+
+* * *
+
+#**Task: Practice merging data, robust regression, and k-medians**  
+
+In this lab, you will analyze data associated with the spread of covid-19.  
+
+##1: Frequently, analysis requires the consolidation of many different datasets.  In order to analyze this data, we'll merge several files.  You will use the R package rvest to scrape data from a table on the internet.  To do this, you can use selector gadget in your web browser (see http://selectorgadget.com/).  Click on the part of the webpage you would like to extract from the html code.  Selector gadget tells you the name of the object you have selected.  I have implemented this in the code block below.  I suggest trying to recreate this on your own.
+
+After formatting the testing data, you will load data from a github repository.  The code to get this data is in the following code block.  If you are interested, the following github repository contains info on accessing and transforming the raw time-series data for covid-19 cases:
+
+https://github.com/RamiKrispin/coronavirus/blob/master/data_raw/pulling%20raw%20data.R.
+
+Feel free to use chunks of this code to complete the assignment (not necessary).
+
+Finally, merge the datasets called testdat and raw. Try a full join, an inner join, a semi join and an anti join.  List the primary and secondary key (if there is one) for each data set.  How long is each resulting data set.  Explain what each type of join does.
+
+**Solution:**  
+  
+1) full_join: Primary key is Country. The foreign key is Country. The resulting data set is **246** rows long. Full_join returns all rows and columns from both testdat and raw data. Where there are not matching values, it returns NA for the one missing.  
+
+2) inner_join: Primary key is Country. The foreign key is Country. The resulting data set is **42** rows long. Inner_join returns all rows from testdat where there are matching values in raw data. If there are multiple matches bewteen testdat and raw data, such as Australia, France, and the Netherlands, all combination of the matches are returned.  
+
+3) semi_join: Primary key is Country. The foreign key is Country. The resulting data set is **17** rows long. Semi_join returns all rows from testdat where there are mathcing values in raw data, keeping just column from testdat.  
+
+4) anti_join: Primary key is Country. The foreign key is Country. The resulting data set is **1** row long. Anthi_join returns all rows from testdat where there are not matching values in raw data, which in this case is Hong Kong, and keeping just columns from testdat.
+```{r, warning=FALSE}
+### First install and load the necessary package
+#install.packages("rvest")
+library('rvest')
+library(dplyr)
+
+## get the url of the page
+## this site contains information regarding the number of coronavirus tests given in several different countries
+url <- 'https://www.worldometers.info/coronavirus/covid-19-testing/'
+
+## Reading the HTML code from the website
+webpage <- read_html(url)
+
+## selecting the node we want
+## I have used the gadget selector to do this
+## see http://selectorgadget.com/
+
+## get the html node we want
+testing_data_html <- html_nodes(webpage,'td')
+## extract the text from the node
+mydata <- html_text(testing_data_html)
+## reshape this in to a data frame
+testdat <- as.data.frame(matrix(mydata[7:114],108/6,6,byrow = T))
+## add colnames 
+colnames(testdat) <- sapply(mydata[1:6],trimws,which = "both")
+## remove the commas from the numbers
+testdat[,c("Tests Performed","Tests per Million People","Population")] <- apply(testdat[,c("Tests Performed","Tests per Million People","Population")],c(2),gsub,pattern = ",",replacement = "")
+
+
+print(testdat)
+
+## fix column names
+names(testdat)[5] <- "Official"
+names(testdat)[6] <- "Source"
+
+##################################
+## get the raw data from github ##
+##################################
+
+raw <- read.csv(file = "time_series_covid19_confirmed_global.csv", header = TRUE, stringsAsFactors = FALSE)
+
+names(raw)[2] <- "Country"
+raw$Country <- as.factor(raw$Country)
+
+## Fix country names to be the same as the ones in testdat
+levels(raw$Country)[levels(raw$Country)=="US"] <- "USA"
+levels(raw$Country)[levels(raw$Country)=="United Kingdom"] <- "UK"
+levels(raw$Country)[levels(raw$Country)=="Taiwan*"] <- "Taiwan"
+levels(raw$Country)[levels(raw$Country)=="Korea, South"] <- "South Korea"
+
+## perfrom the joins
+inner <- inner_join(testdat, raw, by = "Country")
+full <- full_join(testdat, raw, by = "Country")
+semi <- semi_join(testdat, raw, by = "Country")
+anti <- anti_join(testdat, raw, by = "Country")
+
+#left_join(testdat, raw)
+#right_join(data1, data2,by = “SEQN”)
+
+
+##### Get the number of rows
+nrow(inner)
+nrow(full)
+nrow(semi)
+nrow(anti)
+
+
+################################################################
+################################################################
+
+## this part creates the data you need in question 4
+## create a column with the total number of cases
+nc <- ncol(raw)
+
+## use tapply to sum up the cases by country  
+tmp <- tapply(raw[,nc],raw[,"Country"],sum,na.rm=T)
+cdat <- cbind(Country = names(tmp), count = tmp)
+cdat[which(cdat[,"Country"]=="US"),"Country"] <- "USA"
+
+
+merged_cases <- merge(cdat[,c("Country","count")],
+                      testdat[,c("Country","Tests Performed","Tests per Million People","Population")],
+                      by.x = "Country",
+                      by.y = "Country",
+                      all = T)
+
+
+```
+
+##2: Load the datasets called smoking, diabetes, and countries from the canvas site. Execute successive full joins to merge these three datasets.  How many rows are there?
+
+**Solution:**  The three merged datasets using full join have **281** rows.
+```{r, warning=FALSE}
+#can use merge command and full_join
+
+smoking <- read.csv(file = "smoking.csv", header = TRUE)
+diabetes <- read.csv(file = "diabetes.csv", header = TRUE)
+countries <- read.csv(file = "countries.csv", header = TRUE)
+
+## Fix column names
+names(smoking)[1] <- "Country"
+names(diabetes)[1] <- "Country"
+names(countries)[4] <- "Country"
+
+## Change "Korea, Rep." to South Korea
+levels(countries$Country)[levels(countries$Country)=="Korea, Rep."] <- "South Korea"
+levels(diabetes$Country)[levels(diabetes$Country)=="Korea, Rep."] <- "South Korea"
+
+## Change "Korea, Dem. People’s Rep." to North Korea
+levels(countries$Country)[levels(countries$Country)=="Korea, Dem. People's Rep."] <- "North Korea"
+levels(diabetes$Country)[levels(diabetes$Country)=="Korea, Dem. People’s Rep."] <- "North Korea"
+
+q2 <- full_join(smoking, diabetes, by = "Country")
+q2 <- full_join(q2, countries, by = "Country")
+
+nrow(q2)
+	
+```
+
+##3: Now use an inner join to merge the three datsets from question 2.  Cluster the countries using kmeans and plot the variables total smoking rate and diabetes rate in 2019.  Color the points according to the cluster number.  Apply one of your favorite outlier detection methods.  Is there a country that greatly influences the clusters?  Compare kmeans to the clusters obtained using $K$-mediods.  Then install the package Gmedian and use the function kGmedian to cluster using $K$-medians.
+
+
+**Solution:**  Cluster the countries using kmeans and plot total smoking rate and diabetes rate in 2019. Color the points according to the cluster number. 
+```{r, warning=FALSE}
+#install.packages("cluster")
+library(cluster)
+
+q3 <- inner_join(smoking, diabetes, by = "Country")
+q3 <- inner_join(q3, countries, by = "Country")
+
+## create a data frame with only Total Smoking Rate and Diabetes Rate
+smoking_diabetes <- q3 %>%
+  select(totalSmokingRate, X2019)
+
+## run k means with k = 3
+mymeans <- kmeans(smoking_diabetes, centers = 3)
+mycols <- rainbow(3)[mymeans$cluster]
+
+plot(smoking_diabetes, typ="n", xlab="Total Smoking Rate", 
+     ylab="Diabetes Rate", main="K-Means: K=3")
+points(mymeans$centers,pch=20,cex = 2)
+points(smoking_diabetes[,1], smoking_diabetes[,2], pch = 20, col=mycols, cex = .75)
+
+```
+
+**Solution:**  Apply one of your favorite outlier detection methods.  Is there a country that greatly influences the clusters?
+
+##### Using Jackknife, I found that the country Kiribati greatly influences the clusters.
+```{r, warning=FALSE}
+library(tidyverse)
+set.seed(12)
+
+country_list <- q3 %>%
+  select(Country)
+
+country_temp <- unlist(country_list)
+
+first_centre <- matrix(0, nrow(country_list), 2)
+second_centre <- matrix(0, nrow(country_list), 2)
+third_centre <- matrix(0, nrow(country_list), 2)
+
+for(i in 1:nrow(country_list)){
+  
+  ## drop one country in each loop
+  jackknife_subset <- subset(q3, !Country %in% country_temp[i])
+  jackknife_data <- jackknife_subset %>%
+    select(totalSmokingRate, X2019)
+
+  ## get the k means 
+  get_kmeans <- kmeans(jackknife_data, centers = 3)
+  
+  ## record the 3 k means
+  first_centre[i,] <- get_kmeans$centers[1,]
+  second_centre[i,] <- get_kmeans$centers[2,]
+  third_centre[i,] <- get_kmeans$centers[3,]
+}
+
+country_first <- cbind(country_list, first_centre)
+country_second <- cbind(country_list, second_centre)
+country_third <- cbind(country_list, third_centre)
+
+names(country_first)[2] <- "Smoking"
+names(country_first)[3] <- "Diabetes"
+names(country_second)[2] <- "Smoking"
+names(country_second)[3] <- "Diabetes"
+names(country_third)[2] <- "Smoking"
+names(country_third)[3] <- "Diabetes"
+
+all <- full_join(country_first, country_second, by = "Country")
+all <- full_join(all, country_third, by = "Country")
+
+plot(first_centre, typ="n", xlab="Total Smoking Rate", 
+     ylab="Diabetes Rate", main="K-Means: K=3")
+
+points(all$Smoking, all$Diabetes, col = "red", pch=20,cex = .75)
+points(all$Smoking.x, all$Diabetes.x, col = "blue", pch=20,cex = .75)
+points(all$Smoking.y, all$Diabetes.y, col = "green", pch=20,cex = .75)
+points(mymeans$centers,pch=20,cex = 2)
+
+identify(all$Smoking.x, all$Diabetes.x, labels = all$Country)
+```
+
+
+**Solution:**  Compare kmeans to the clusters obtained using $K$-mediods.  
+```{r, warning=FALSE}
+par(mfrow = c(1,2))
+
+## run medoids with k = 3
+mymedoids <- pam(smoking_diabetes, k = 3)
+medoidscols <- rainbow(3)[mymedoids$clustering]
+
+plot(smoking_diabetes, typ="n", xlab="Total Smoking Rate", 
+     ylab="Diabetes Rate", main="K-Medoids: K=3")
+points(smoking_diabetes[,1], smoking_diabetes[,2], pch = 20, col=mycols, cex = .75)
+points(mymedoids$medoids,pch=20,cex = 2)
+
+
+## run k means with k = 3
+mymeans <- kmeans(smoking_diabetes, centers = 3)
+mycols <- rainbow(3)[mymeans$cluster]
+
+plot(smoking_diabetes, typ="n", xlab="Total Smoking Rate", 
+     ylab="Diabetes Rate", main="K-Means: K=3")
+points(mymeans$centers,pch=20,cex = 2)
+points(smoking_diabetes[,1], smoking_diabetes[,2], pch = 20, col=mycols, cex = .75)
+
+```
+
+
+**Solution:**  Then install the package Gmedian and use the function kGmedian to cluster using $K$-medians.
+```{r, warning=FALSE}
+#install.packages("Gmedian")
+library(Gmedian)
+
+## run k median with k = 3
+mymedian <- kGmedian(smoking_diabetes, ncenters = 3)
+mediancols <- rainbow(3)[mymedian$cluster]
+
+plot(smoking_diabetes, typ="n", xlab="Total Smoking Rate", 
+     ylab="Diabetes Rate", main="K-Median: K=3")
+points(smoking_diabetes[,1], smoking_diabetes[,2], pch = 20, col=mycols, cex = .75)
+points(mymedian$centers,pch=20,cex = 2)
+
+```
+
+
+##4: Finally merge the case data (called merged_cases in the code block) from question 1 with the three datasets introduced in question 2.  You will need to reshape the data as we did in question 1.  Build a regression model for the number of total cases in each country.  Make sure to include information regarding the number of people tested per million.  What is the fitted value for the US?  Is this greater or less than the actual number?  Interpret this result.  Finally, compare this with one of the three robust regression methods we learned in lecture (Least Trimmed Squares, Bisquare Weighting, or Huber weighting).  Does the result for the US change?
+
+**Solution:**  Merge the case data (called merged_cases in the code block) from question 1 with the three datasets introduced in question 2.
+```{r, warning=FALSE}
+## Merge "South Korea" and "Korea, South" into one row
+merged_cases <- merged_cases[c(1:87, 89:165, 167:177),]
+merged_cases[174,2] <- 9137
+
+## Merge "UK" and "United Kingdom"
+merged_cases[175,2] <- 9640 
+
+## Fix names
+levels(merged_cases$Country)[levels(merged_cases$Country)=="USA"] <- "United States"
+levels(merged_cases$Country)[levels(merged_cases$Country)=="UK"] <- "United Kingdom"
+
+## Merge 4 datasets
+q4 <- merge(merged_cases, smoking, by = "Country")
+q4 <- merge(q4, diabetes, by = "Country")
+q4 <- merge(q4, countries, by = "Country")
+
+head(q4)
+```
+
+
+**Solution:**  Build a regression model for the number of total cases in each country.  Make sure to include information regarding the number of people tested per million.  What is the fitted value for the US?  Is this greater or less than the actual number?  Interpret this result.
+
+##### The fitted regression equation is $\hat{Count}$ = 47.706638 + 0.011099Tests.  
+##### This means the fitted value for the number of total cases in the US is Count = 13988.909 -1.049(26) = 13962 people.  
+##### 13962 cases is less than the actual number, which is 65778 cases.
+```{r, warning = FALSE}
+## Change "Tests per Million People" to TestsPerMillion
+names(q4)[4] <- "TestsPerMillion"
+
+lm.data <- q4 %>%
+  select(Country, count, TestsPerMillion) %>%
+  filter(!is.na(TestsPerMillion))
+
+head(lm.data)
+
+lm.data$count <- as.numeric(as.vector(lm.data$count))
+lm.data$TestsPerMillion <- as.numeric(lm.data$TestsPerMillion)
+
+q4.lm <- lm(data = lm.data, count ~ TestsPerMillion)
+
+summary(q4.lm)
+```
+
+**Solution:** Finally, compare this with one of the three robust regression methods we learned in lecture (Least Trimmed Squares, Bisquare Weighting, or Huber weighting).  Does the result for the US change?  
+  
+##### The result for the US changed. The fitted Least Trimmed Squares equation is $\hat{Count}$ = 3576.3432 + 1.6476Tests.  
+##### This means the fitted value for the number of total cases in the US is Count = 3576.3432 + 1.6476(26) = 3620 people.  
+##### 3620 cases is less than the actual number, which is 65778 cases.
+```{r, warning = FALSE}
+#install.packages("robustbase")
+
+library(robustbase)
+lts.lm <- ltsReg(data = lm.data, count ~ TestsPerMillion)
+
+summary(lts.lm)
+
+```
+
+
+* * *
