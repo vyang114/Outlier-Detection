@@ -1,0 +1,224 @@
+---
+title: 'STAT 341/641 Lab: Week Six'
+author: "Vera Yang"
+date: "March 8, 2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+---
+
+**STAT 341/641:**        Intro to EDA and Statistical Computing  
+**Lab #5:**              Rejection Sampling and the Bootstrap  
+**Teaching Assistant:**  Yanjun Liu
+
+* * *
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Directions:**  You will use the lab time to complete this assignment.
+
+* * *
+
+#**Task: Practice rejection sampling and the bootstrap**  
+
+
+##1: Suppose we would like to obtain samples from a probability density that satisfies
+$$f(x) \propto \exp\left\{-x^2/2 \right\}(\sin(6x)^2 + 3\cos(x)^2).$$
+The symbol $\propto$ indicates that the density is proportional to $\exp\left\{-x^2/2 \right\}(\sin(6x)^2 + 3\cos(x)^2)$.  In general, two quantities $a$ and $b$ are proportional if $a = kb$ where $k$ is called the constant of proportionality.  For probability distributions, we frequently know the numerator, but not the denominator.  
+
+Anyway, find a number $M \geq 1$ such that the envelope condition holds for proposal distribution $g(x) = N(0,1).$  Recall the envelope condition is $f(x) \leq M g(x)$ for all $x$.  
+
+As a hint, look at the code chunk below.  Try looping over values for $M$.  Choose the smallest value of $M$ that satisfies the condition. 
+
+
+**Solution:** The smallest M value is 10.
+```{r}
+
+myseq <- seq(from = -4, to = 4, by = .1)
+f <- function(x){
+  exp(-x^2/2)*(sin(6*x)^2 + 3*cos(x)^2)
+}
+
+#all(f(myseq) < M * dnorm(myseq))
+
+# values for M will be 1 to 20
+M <- c(1:20)
+
+# this stores the minimum M value
+min_M <- numeric(length(M))
+
+for(i in 1:length(M)){
+  if(all(f(myseq) < M[i] * dnorm(myseq))){
+    min_M[i] <- M[i]
+  #  print(paste0("M is", M[i]))
+  }
+}
+
+min_M <- min_M[min_M>0]
+min_M <- min(min_M)
+min_M
+```
+
+##2: Write a loop to obtain 1,000 samples from $f(\cdot)$.  How many iterations does it take to get 1,000 samples?  
+$f(\cdot)$
+Edit the code chunk supplied below to accomplish this.
+
+**Solution:**  It takes 1772 iterations to get 1,000 samples.
+```{r}
+set.seed(123)
+mynum <- 0
+N <- 1000
+fsamples <- NULL
+M <- 10 # this M value is from Question 1
+
+# this variables keeps track the total number of iterations
+# to obtain 1000 samples
+count <- 0
+
+while(mynum < N){
+  ## sample from the proposal
+  mysamp <- rnorm(1)
+  
+  ## compute r
+  myr = (f(mysamp)) / 
+    (M * dnorm(mysamp))
+
+  if(sample(c(0,1), 1, prob = c(1-myr, myr)) == 1){
+    ## record the sample
+    fsamples <- c(fsamples, mysamp) 
+    #plug this fsamples into the x inside Mg(x) for Question 3
+    
+    #mynum only tracks the number of samples that I'm keeping 
+    # (ones that satisfy the condition)
+    mynum <- mynum + 1 
+  }
+
+  # incease count by 1 after each iteration 
+  # to find the total number of iterations
+  count = count + 1
+}
+
+count
+
+```
+
+##3: Plot histograms of 1,000 samples from $Mg(x)$ and $f(x)$.  Use pastel colors with a low alpha (high level of transparency) in order to overlay the two distributions on the same plot.
+
+**Solution:**  Blue is samples from Mg(x) and red is samples from f(x)!
+```{r}
+library(tidyverse)
+
+# g(x) is dnorm(fsamples)
+M <- 10
+mgsamples <- M*dnorm(fsamples)  #this is Mg(x)
+
+fx <- f(fsamples)  #this is f(x)
+
+fsamples.df <- as.data.frame(fx)
+mgsamples.df <- as.data.frame(mgsamples)
+
+fg <- as.data.frame(cbind(fsamples.df, mgsamples.df))
+
+# blue is samples from f(x)
+# red is samples from Mg(x)
+ggplot(data = fg) +
+  geom_histogram(aes(fx), fill = "#FF9999", alpha = .5) +
+  geom_histogram(aes(x = mgsamples), fill = "#56B4E9", alpha = .5) +
+  ggtitle("Histogram of f(x) and Mg(x)") +
+  xlab("f(x) and Mg(x)")
+```
+
+##4: Load the rousseeuw_outlier_set1.csv data set.  You are going to edit the code chunk below to create some interesting plots. For each bootstrap replication, record whether the first row of the data set has been chosen.  Then make two different plots of the regression lines:  one for all bootstrap samples with the first row and another for all bootstrap samples without the first row.  How many of the 1,000 bootstrap replications contain the first row?
+
+**Solution:**  
+```{r}
+set.seed(641)
+outs <- read.csv(file = "rousseeuw_outlier_set1.csv")
+R <- 1000
+
+
+# count the number times the first row is selected in every sample
+count_first <- 0  
+
+# matrix to record the regression coefficients
+# for samples with the first row and without first row
+with_first_betas <- matrix(0,R,2)
+without_first_betas <- matrix(0,R,2)
+
+# loop to get 1000 samples
+for (j in c(1:R)){
+  
+  ## sample indices to make bootstrap sample
+  inds <- sample(c(1:nrow(outs)), size = nrow(outs),replace = T)
+  inds.df <- as.data.frame(inds)
+  
+  # count the number of times that first row is selected in a sample
+  for(k in 1:nrow(inds.df)){
+    if(inds.df[k,] == 1){
+      count_first = count_first + 1
+    }
+  }
+  
+  # in each sample, if first row is selected,
+  # compute the regression and store coefficients in with_first_betas
+  if(count_first > 0){
+    with_first.lm <- lm(Y ~ X, data = outs[inds,])
+    with_first_betas[j,] <- coef(with_first.lm)
+  }else{
+    
+    # else compute regression and store coefficients in without_first_betas
+    without_first.lm <- lm(Y ~ X, data = outs[inds,])
+    without_first_betas[j,] <- coef(without_first.lm)
+  }
+  
+  # reset count for number of first row in each iteration
+  count_first = 0
+}
+
+# remove the empty rows 
+with_first_betas <- with_first_betas[with_first_betas[, 1] > 0,]
+without_first_betas <- without_first_betas[without_first_betas[, 1] > 0, ]
+
+# get the column means
+with_first_mean <- colMeans(with_first_betas)
+without_first_mean <- colMeans(without_first_betas)
+
+# assign a colour to every set of regression coefficients
+with_first_cols <- rainbow(nrow(with_first_betas), alpha = .20)
+without_first_cols <- rainbow(nrow(without_first_betas), alpha = .20)
+
+# plot the lines
+plot(outs,typ="n", xlab="input", ylab="output",
+     main = "Regression for Samples with First Row")
+for (i in c(1:nrow(with_first_betas))){
+  abline(a = with_first_betas[i,1], b = with_first_betas[i,2], 
+         col=with_first_cols[i], lwd = .5)
+}
+
+plot(outs,typ="n", xlab="input", ylab="output",
+     main = "Regression for Samples without First Row")
+for (i in c(1:nrow(without_first_betas))){
+  abline(a = without_first_betas[i,1], b = without_first_betas[i,2], 
+         col=without_first_cols[i], lwd = .5)
+}
+
+```
+
+```{r, include=FALSE}
+# code given in lab
+mybetas <- matrix(0,R,2)
+betas <- colMeans(mybetas)
+mycols <- rainbow(R,alpha = .20)
+plot(outs,typ="n",xlab="input",ylab="output",main = "Regression with Outliers")
+points(outs,pch = 20, col="blue")
+#abline(res, col = "red")
+for (j in c(1:R)){
+  abline(a = mybetas[j,1], b = mybetas[j,2], col=mycols[j], lwd = .5)
+}
+```
+
+
+* * *
