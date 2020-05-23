@@ -10,15 +10,12 @@ output:
 
 **STAT 341/641:**        Intro to EDA and Statistical Computing  
 **Lab #5:**              Rejection Sampling and the Bootstrap  
-**Teaching Assistant:**  Yanjun Liu
 
 * * *
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
-**Directions:**  You will use the lab time to complete this assignment.
 
 * * *
 
